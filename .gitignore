@@ -68,3 +68,4 @@ tftp/bin/*
 !tftp/bin/.keep
 chat/bin/*
 !chat/bin/.keep
+.vscode

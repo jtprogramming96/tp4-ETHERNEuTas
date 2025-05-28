@@ -59,7 +59,8 @@ int main(int argc, char* argv[]) {
         short opcode = ntohs(packet.opcode);
 
         switch (opcode) {
-            case 1: {  // WRQ (Write Request)
+            case 1: {  
+                // WRQ (Write Request)
                 printf("WRQ recibido\n");
                 
                 // Extraer nombre de archivo y modo
@@ -69,7 +70,7 @@ int main(int argc, char* argv[]) {
                 printf("Cliente quiere escribir archivo: %s (modo: %s)\n", filename, mode);
                 
                 // Construir ruta completa: uploads/filename
-                char full_path[512];
+                char full_path[1024];
                 snprintf(full_path, sizeof(full_path), "uploads/%s", filename);
 
                 // Crear carpeta si no existe (esto podrías moverlo antes del bucle principal si quieres hacerlo solo una vez)
@@ -100,8 +101,6 @@ int main(int argc, char* argv[]) {
                     break;
                 }
 
-
-                
                 // Enviar ACK (block #0) para confirmar WRQ
                 struct tftp_packet ack_packet;
                 ack_packet.opcode = htons(4);  // ACK opcode
@@ -167,6 +166,7 @@ int main(int argc, char* argv[]) {
                 break;
             }
             case 2:  // RRQ (Read Request)
+                // Bandera de uso exclusivo
                 printf("RRQ recibido\n");
                 // Implementar lógica de lectura
                 break;
