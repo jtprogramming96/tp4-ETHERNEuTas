@@ -166,22 +166,86 @@ int main(int argc, char* argv[]) {
                 break;
             }
             case 2:  // RRQ (Read Request)
-                // Bandera de uso exclusivo
+                {
                 printf("RRQ recibido\n");
-                // Implementar lógica de lectura
+
+                // Extraer nombre de archivo y modo
+                char *filename = packet.payload;
+                char *mode = filename + strlen(filename) + 1;
+
+                printf("Cliente quiere leer archivo: %s (modo: %s)\n", filename, mode);
+
+                // Ruta al archivo en uploads/
+                char full_path[512];
+                snprintf(full_path, sizeof(full_path), "uploads/%s", filename);
+
+                int file_fd = open(full_path, O_RDONLY);
+                if (file_fd < 0) {
+                    perror("Archivo no encontrado o no se pudo abrir");
+                    struct tftp_packet error_packet;
+                    error_packet.opcode = htons(5);  // ERROR
+                    short error_code = htons(1);     // File not found
+                    char *error_msg = "File not found";
+                    memcpy(error_packet.payload, &error_code, 2);
+                    strcpy(error_packet.payload + 2, error_msg);
+                    error_packet.payload[2 + strlen(error_msg)] = 0;
+
+                    sendto(udp_socket, &error_packet, 4 + strlen(error_msg) + 1, 0,
+                        (struct sockaddr*)&client_addr, client_len);
+                    break;
+                }
+
+                short block_number = 1;
+                ssize_t bytes_read;
+                char buffer[512];
+
+                while ((bytes_read = read(file_fd, buffer, sizeof(buffer))) > 0) {
+                    struct {
+                        short opcode;
+                        short block;
+                        char data[512];
+                    } data_packet;
+
+                    data_packet.opcode = htons(3);  // DATA
+                    data_packet.block = htons(block_number);
+                    memcpy(data_packet.data, buffer, bytes_read);
+
+                    ssize_t sent_len = sendto(udp_socket, &data_packet, 4 + bytes_read, 0,
+                                            (struct sockaddr*)&client_addr, client_len);
+
+                    if (sent_len < 0) {
+                        perror("Error al enviar paquete DATA");
+                        break;
+                    }
+
+                    // Esperar ACK
+                    struct tftp_packet ack_packet;
+                    ssize_t ack_len = recvfrom(udp_socket, &ack_packet, sizeof(ack_packet), 0,
+                                            (struct sockaddr*)&client_addr, &client_len);
+
+                    if (ack_len < 0) {
+                        perror("Error al recibir ACK");
+                        break;
+                    }
+
+                    short ack_opcode = ntohs(ack_packet.opcode);
+                    short ack_block;
+                    memcpy(&ack_block, ack_packet.payload, 2);
+                    ack_block = ntohs(ack_block);
+
+                    if (ack_opcode != 4 || ack_block != block_number) {
+                        printf("ACK inválido recibido. Esperado: %d, recibido: %d\n", block_number, ack_block);
+                        break;
+                    }
+
+                    printf("ACK %d recibido\n", block_number);
+                    block_number++;
+                }
+
+                printf("Transferencia de lectura finalizada\n");
+                close(file_fd);
                 break;
-            case 3:  // DATA
-                printf("DATA recibido\n");
-                // Implementar lógica para datos
-                break;
-            case 4:  // ACK
-                printf("ACK recibido\n");
-                // Implementar lógica para ACK
-                break;
-            case 5:  // ERROR
-                printf("ERROR recibido\n");
-                // Implementar lógica para error
-                break;
+            }
             default:
                 printf("Opcode no válido: %d\n", opcode);
         }
