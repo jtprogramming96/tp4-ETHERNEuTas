@@ -176,7 +176,7 @@ int main(int argc, char* argv[]) {
                 printf("Cliente quiere leer archivo: %s (modo: %s)\n", filename, mode);
 
                 // Ruta al archivo en uploads/
-                char full_path[512];
+                char full_path[1024];
                 snprintf(full_path, sizeof(full_path), "uploads/%s", filename);
 
                 int file_fd = open(full_path, O_RDONLY);
