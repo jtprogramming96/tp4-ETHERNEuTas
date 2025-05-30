@@ -25,7 +25,7 @@ int main(int argc, char* argv[]) {
     char mode[] = "netascii";  // Modo de transferencia
 
     char action;
-    printf("\nDesea leer (r) o escribir (w) un archivo? ");
+    printf("\nDesea descargar (d) o subir (s) un archivo? ");
     scanf(" %c", &action);
 
     printf("Ingrese nombre del archivo: ");
@@ -44,7 +44,7 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    if (action == 'w') {
+    if (action == 's') {
         // Abrir archivo local primero
         FILE *fp = fopen(filename, "rb");
         if (!fp) {
@@ -60,7 +60,6 @@ int main(int argc, char* argv[]) {
             exit(EXIT_FAILURE);
         }
 
-
         struct sockaddr_in server_addr;
         memset(&server_addr, 0, sizeof(server_addr));
         server_addr.sin_family = AF_INET;
@@ -69,7 +68,7 @@ int main(int argc, char* argv[]) {
 
         // Construir paquete WRQ (Write Request)
         struct tftp_format wrq_packet;
-        wrq_packet.opcode = htons(1);  // WRQ opcode = 1
+        wrq_packet.opcode = htons(2);  // WRQ opcode = 2
         
         // Formato: filename\0mode\0
         int payload_len = snprintf(wrq_packet.payload, sizeof(wrq_packet.payload),
@@ -87,7 +86,7 @@ int main(int argc, char* argv[]) {
 
         printf("WRQ enviado para archivo: %s\n", filename);
 
-            // Esperar ACK del bloque 0
+        // Esperar ACK del bloque 0
         struct tftp_format ack_packet;
         socklen_t server_len = sizeof(server_addr);
         ssize_t ack_len = recvfrom(udp_socket, &ack_packet, sizeof(ack_packet), 0,
@@ -103,15 +102,45 @@ int main(int argc, char* argv[]) {
         memcpy(&ack_block, ack_packet.payload, 2);
         ack_block = ntohs(ack_block);
 
+        if (ack_opcode == 5) {
+            switch (ack_block)
+            {
+                case 0:
+                    char *error_msg = ack_packet.payload + 2;
+                    printf("Error: %s.\n", error_msg); 
+                    break;
+                case 1:
+                    printf("Archivo no encontrado.\n");
+                    break;  
+                case 2:
+                    printf("Acceso restringido.\n"); 
+                    break; 
+                case 3:
+                    printf("Disco lleno o asignacion excedida.\n");  
+                    break;
+                case 4:
+                    printf("Operacion TFTP no permitida.\n");  
+                    break;
+                case 5:
+                    printf("ID de transferencia desconocida.\n"); 
+                    break; 
+                case 6:
+                    printf("El archivo ya existe.\n");  
+                    break;
+                case 7:
+                    printf("No se encuentra dicho usuario.\n");  
+                    break;
+            }
+            close(udp_socket);
+            exit(EXIT_FAILURE);
+        }
+
         if (ack_opcode != 4 || ack_block != 0) {
-            printf("ACK inválido recibido\n");
             close(udp_socket);
             exit(EXIT_FAILURE);
         }
 
         printf("ACK 0 recibido. Iniciando envío de datos...\n");
-
-
         short block_number = 1;
         char buffer[512];
         size_t bytes_read;
@@ -155,7 +184,7 @@ int main(int argc, char* argv[]) {
 
         printf("Transferencia finalizada. Archivo '%s' enviado correctamente.\n", filename);
 
-    } else if (action == 'r') {
+    } else if (action == 'd') {
         char path[300];
         snprintf(path, sizeof(path), "downloads/%s", filename);
 
@@ -176,7 +205,7 @@ int main(int argc, char* argv[]) {
         }
 
         struct tftp_format rrq_packet;
-        rrq_packet.opcode = htons(2); // RRQ
+        rrq_packet.opcode = htons(1); // RRQ
         int payload_len = snprintf(rrq_packet.payload, sizeof(rrq_packet.payload),
                                    "%s%c%s%c", filename, 0, mode, 0);
 
@@ -224,7 +253,7 @@ int main(int argc, char* argv[]) {
         fclose(out);
         printf("Archivo '%s' descargado exitosamente a 'downloads/'\n", filename);
     } else {
-        printf("Acción inválida. Use 'r' para leer o 'w' para escribir.\n");
+        printf("Acción inválida. Use 'd' para descargar o 's' para subir.\n");
     }
 
     close(udp_socket);

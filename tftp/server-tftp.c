@@ -59,7 +59,7 @@ int main(int argc, char* argv[]) {
         short opcode = ntohs(packet.opcode);
 
         switch (opcode) {
-            case 1: {  
+            case 2: {  
                 // WRQ (Write Request)
                 printf("WRQ recibido\n");
                 
@@ -165,7 +165,7 @@ int main(int argc, char* argv[]) {
                 close(file_fd);
                 break;
             }
-            case 2:  // RRQ (Read Request)
+            case 1:  // RRQ (Read Request)
                 {
                 printf("RRQ recibido\n");
 
