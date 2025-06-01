@@ -8,9 +8,13 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#define OPCODE_ERROR 5  // definir constantes
+#define OPCODE_DATA 3
+#define DATA_MAX_SIZE 512
+
 struct tftp_format {
     short opcode;       // Opcode en formato de red (big-endian)
-    char payload[512];  // Payload (nombre de archivo + modo)
+    char payload[DATA_MAX_SIZE];  // Payload (nombre de archivo + modo)
 };
 
 int main(int argc, char* argv[]) {
@@ -81,6 +85,7 @@ int main(int argc, char* argv[]) {
         if (sent < 0) {
             perror("Error al enviar WRQ");
             close(udp_socket);
+            // TODO: cerrar archivo fp ?
             exit(EXIT_FAILURE);
         }
 
@@ -94,16 +99,17 @@ int main(int argc, char* argv[]) {
         if (ack_len < 0) {
             perror("Error al recibir ACK");
             close(udp_socket);
+            // TODO: cerrar archivo fp ?
             exit(EXIT_FAILURE);
         }
 
-        short ack_opcode = ntohs(ack_packet.opcode);
-        short ack_block;
-        memcpy(&ack_block, ack_packet.payload, 2);
-        ack_block = ntohs(ack_block);
+        short opcode = ntohs(ack_packet.opcode);
+        short payload;
+        memcpy(&payload, ack_packet.payload, 2);
+        payload = ntohs(payload);
 
-        if (ack_opcode == 5) {
-            switch (ack_block)
+        if (opcode == OPCODE_ERROR) { // format: |opcode|errCode|msg|0|
+            switch (payload)           // payload <- errCode
             {
                 case 0:
                     char *error_msg = ack_packet.payload + 2;
@@ -132,52 +138,60 @@ int main(int argc, char* argv[]) {
                     break;
             }
             close(udp_socket);
+            // TODO: cerrar archivo fp ?
             exit(EXIT_FAILURE);
         }
 
-        if (ack_opcode != 4 || ack_block != 0) {
+        if (opcode != 4 || payload != 0) {
+            // y opcode = 1, 2 o 3 no importan?
             close(udp_socket);
+            // TODO: cerrar archivo fp ?
             exit(EXIT_FAILURE);
         }
 
-        printf("ACK 0 recibido. Iniciando envío de datos...\n");
-        short block_number = 1;
-        char buffer[512];
+        printf("Bloque 0 confirmado. Iniciando envío de datos...\n");
+        short sent_block = 1;
+        char buffer[DATA_MAX_SIZE];
         size_t bytes_read;
 
         while ((bytes_read = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
             struct {
                 short opcode;
                 short block;
-                char data[512];
+                char data[DATA_MAX_SIZE];
             } data_packet;
 
-            data_packet.opcode = htons(3);
-            data_packet.block = htons(block_number);
+            data_packet.opcode = htons(OPCODE_DATA);
+            data_packet.block = htons(sent_block);
             memcpy(data_packet.data, buffer, bytes_read);
 
-            ssize_t data_packet_len = 4 + bytes_read;
+            ssize_t data_packet_len = sizeof(data_packet.opcode) + sizeof(data_packet.block) + bytes_read;
             sendto(udp_socket, &data_packet, data_packet_len, 0,
                 (struct sockaddr*)&server_addr, server_len);
 
-            // Esperar ACK
+            // Esperar ACK del dato
             ack_len = recvfrom(udp_socket, &ack_packet, sizeof(ack_packet), 0,
                             (struct sockaddr*)&server_addr, &server_len);
+
             if (ack_len < 0) {
                 perror("Error al recibir ACK");
+                // TODO: cerrar socket?
+                // TODO: cerrar fp?
                 break;
             }
 
-            memcpy(&ack_block, ack_packet.payload, 2);
-            ack_block = ntohs(ack_block);
+            memcpy(&payload, ack_packet.payload, 2);
+            short received_block = ntohs(payload);
 
-            if (ntohs(ack_packet.opcode) != 4 || ack_block != block_number) {
-                printf("ACK inválido recibido. Esperado %d, recibido %d\n", block_number, ack_block);
+            if (ntohs(ack_packet.opcode) != 4 || received_block != sent_block) {
+                printf("ACK inválido recibido. Bloque esperado %d, bloque recibido %d\n", sent_block, received_block);
+                // TODO: cerrar socket?
+                // TODO: cerrar fp?
                 break;
             }
 
-            printf("ACK %d recibido\n", block_number);
-            block_number++;
+            printf("Bloque %d confirmado\n", sent_block);
+            sent_block++;
         }
 
         fclose(fp);
@@ -218,7 +232,7 @@ int main(int argc, char* argv[]) {
             struct {
                 short opcode;
                 short block;
-                char data[512];
+                char data[DATA_MAX_SIZE];
             } data_packet;
 
             ssize_t data_len = recvfrom(udp_socket, &data_packet, sizeof(data_packet), 0,
@@ -247,7 +261,7 @@ int main(int argc, char* argv[]) {
 
             printf("ACK %d enviado\n", block_num);
             expected_block++;
-            if (data_len - 4 < 512) break;
+            if (data_len - 4 < DATA_MAX_SIZE) break;
         }
 
         fclose(out);

@@ -59,8 +59,8 @@ int main(int argc, char* argv[]) {
         short opcode = ntohs(packet.opcode);
 
         switch (opcode) {
-            case 2: {  
-                // WRQ (Write Request)
+            case 2: { 
+                // WRQ (Write Request) format: |opcode|fileName|0|netascii|0|
                 printf("WRQ recibido\n");
                 
                 // Extraer nombre de archivo y modo
