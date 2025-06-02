@@ -11,13 +11,13 @@
 
 struct tftp_packet {
     short opcode;       // Opcode en formato de red (big-endian)
-    char payload[MAX_PAYLOAD_SIZE];
+    char payload[MAX_SIZE];
 };
 
 int main(int argc, char* argv[]) {
     int udp_socket;
     struct sockaddr_in client_addr, server_addr;
-    socklen_t client_len = sizeof(client_addr);
+    socklen_t client_addr_len = sizeof(client_addr);
     
     if (argc != 2) {
         printf("Uso: %s PUERTO\n", argv[0]);
@@ -48,7 +48,7 @@ int main(int argc, char* argv[]) {
     while (1) {
         struct tftp_packet packet;
         ssize_t recv_len = recvfrom(udp_socket, &packet, sizeof(packet), 0,
-                                 (struct sockaddr*)&client_addr, &client_len);
+                                 (struct sockaddr*)&client_addr, &client_addr_len);
         
         if (recv_len < 0) {
             perror("Error al recibir paquete");
@@ -80,16 +80,16 @@ int main(int argc, char* argv[]) {
                     printf("Error: Archivo ya existe en uploads/\n");
 
                     struct tftp_packet error_packet;
-                    error_packet.opcode = htons(5);  // Opcode de error
-                    short error_code = htons(6);     // Código 6 = Archivo ya existe
+                    error_packet.opcode = htons(OPCODE_ERROR);
+                    short error_code = htons(TFTP_ERROR_FILE_EXISTS);
                     char *error_msg = "File already exists";
 
                     memcpy(error_packet.payload, &error_code, 2);
                     strcpy(error_packet.payload + 2, error_msg);
-                    error_packet.payload[2 + strlen(error_msg)] = 0;
+                    error_packet.payload[2 + strlen(error_msg)] = 0; // payload = |errCode|errMsg|0|
 
                     sendto(udp_socket, &error_packet, 4 + strlen(error_msg) + 1, 0,
-                        (struct sockaddr*)&client_addr, client_len);
+                        (struct sockaddr*)&client_addr, client_addr_len);
                     break;
                 }
 
@@ -102,43 +102,42 @@ int main(int argc, char* argv[]) {
 
                 // Enviar ACK (block #0) para confirmar WRQ
                 struct tftp_packet ack_packet;
-                ack_packet.opcode = htons(4);  // ACK opcode
-                short block_num = htons(0);    // Block number 0
+                ack_packet.opcode = htons(OPCODE_ACK);
+                short block_num = htons(0);                     // Block number 0
                 memcpy(ack_packet.payload, &block_num, 2);
                 
                 sendto(udp_socket, &ack_packet, 4, 0,
-                      (struct sockaddr*)&client_addr, client_len);
+                      (struct sockaddr*)&client_addr, client_addr_len);
                 
                 printf("ACK enviado, esperando datos...\n");
                 
-                // Dentro del case 1 (WRQ), después de enviar ACK del bloque 0...
                 int expected_block = 1;
 
-                while (1) {
+                while (1) { // receiving data from client WRQ
                     struct {
                         short opcode;
                         short block;
-                        char data[512];
+                        char data[MAX_SIZE];
                     } data_packet;
 
                     ssize_t data_len = recvfrom(udp_socket, &data_packet, sizeof(data_packet), 0,
-                            (struct sockaddr*)&client_addr, &client_len);
+                            (struct sockaddr*)&client_addr, &client_addr_len);
 
                     if (data_len < 0) {
                         perror("Error al recibir DATA");
                         break;
                     }
 
-                    short data_opcode = ntohs(data_packet.opcode);
-                    short block_number = ntohs(data_packet.block);
-                    if (data_opcode != 3 || block_number != expected_block) {
+                    short received_opcode = ntohs(data_packet.opcode);
+                    short received_block = ntohs(data_packet.block);
+                    if (received_opcode != OPCODE_DATA || expected_block != received_block) {
                         printf("Bloque inesperado o no es DATA. Opcode: %d, Bloque: %d (esperado: %d)\n",
-                            data_opcode, block_number, expected_block);
+                            received_opcode, received_block, expected_block);
                         continue;
                     }
 
                     // Escribir datos
-                    ssize_t data_size = data_len - 4;
+                    ssize_t data_size = data_len - sizeof(data_packet.opcode) - sizeof(data_packet.block);
                     if (write(file_fd, data_packet.data, data_size) != data_size) {
                         perror("Error al escribir en el archivo");
                         break;
@@ -146,16 +145,22 @@ int main(int argc, char* argv[]) {
 
                     // Enviar ACK
                     struct tftp_packet ack_packet;
-                    ack_packet.opcode = htons(4);
-                    short ack_block = htons(block_number);
-                    memcpy(ack_packet.payload, &ack_block, 2);
-                    sendto(udp_socket, &ack_packet, 4, 0, (struct sockaddr*)&client_addr, client_len);
-                    printf("ACK enviado para bloque %d\n", block_number);
+                    ack_packet.opcode = htons(OPCODE_ACK);
+                    short ack_block = htons(received_block);
+                    memcpy(ack_packet.payload, &ack_block, BLOCK_SIZE);
+                    sendto(udp_socket,
+                            &ack_packet,
+                            sizeof(ack_packet.opcode) + BLOCK_SIZE,
+                            0,
+                            (struct sockaddr*)&client_addr,
+                            client_addr_len);
+
+                    printf("ACK enviado para bloque %d\n", received_block);
 
                     expected_block++;
 
                     // Fin del archivo
-                    if (data_size < 512)
+                    if (data_size < MAX_SIZE)
                         break;
                 }
 
@@ -190,7 +195,7 @@ int main(int argc, char* argv[]) {
                     error_packet.payload[2 + strlen(error_msg)] = 0;
 
                     sendto(udp_socket, &error_packet, 4 + strlen(error_msg) + 1, 0,
-                        (struct sockaddr*)&client_addr, client_len);
+                        (struct sockaddr*)&client_addr, client_addr_len);
                     break;
                 }
 
@@ -210,7 +215,7 @@ int main(int argc, char* argv[]) {
                     memcpy(data_packet.data, buffer, bytes_read);
 
                     ssize_t sent_len = sendto(udp_socket, &data_packet, 4 + bytes_read, 0,
-                                            (struct sockaddr*)&client_addr, client_len);
+                                            (struct sockaddr*)&client_addr, client_addr_len);
 
                     if (sent_len < 0) {
                         perror("Error al enviar paquete DATA");
@@ -220,7 +225,7 @@ int main(int argc, char* argv[]) {
                     // Esperar ACK
                     struct tftp_packet ack_packet;
                     ssize_t ack_len = recvfrom(udp_socket, &ack_packet, sizeof(ack_packet), 0,
-                                            (struct sockaddr*)&client_addr, &client_len);
+                                            (struct sockaddr*)&client_addr, &client_addr_len);
 
                     if (ack_len < 0) {
                         perror("Error al recibir ACK");

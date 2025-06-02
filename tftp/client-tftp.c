@@ -11,7 +11,7 @@
 
 struct tftp_format {
     short opcode;       // Opcode en formato de red (big-endian)
-    char payload[MAX_PAYLOAD_SIZE];  // Payload (nombre de archivo + modo)
+    char payload[MAX_SIZE];  // Payload (nombre de archivo + modo)
 };
 
 int main(int argc, char* argv[]) {
@@ -134,6 +134,7 @@ int main(int argc, char* argv[]) {
                     printf("No se encuentra dicho usuario.\n");  
                     break;
             }
+            printf("Cliente finalizado.\n");
             close(udp_socket);
             // TODO: cerrar archivo fp ?
             exit(EXIT_FAILURE);
@@ -148,14 +149,14 @@ int main(int argc, char* argv[]) {
 
         printf("Bloque 0 confirmado. Iniciando envío de datos...\n");
         short sent_block = 1;
-        char buffer[MAX_PAYLOAD_SIZE];
+        char buffer[MAX_SIZE];
         size_t bytes_read;
 
         while ((bytes_read = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
             struct {
                 short opcode;
                 short block;
-                char data[MAX_PAYLOAD_SIZE];
+                char data[MAX_SIZE];
             } data_packet;
 
             data_packet.opcode = htons(OPCODE_DATA);
@@ -172,7 +173,6 @@ int main(int argc, char* argv[]) {
 
             if (ack_len < 0) {
                 perror("Error al recibir ACK");
-                // TODO: cerrar socket?
                 // TODO: cerrar fp?
                 break;
             }
@@ -182,7 +182,6 @@ int main(int argc, char* argv[]) {
 
             if (ntohs(ack_packet.opcode) != 4 || received_block != sent_block) {
                 printf("ACK inválido recibido. Bloque esperado %d, bloque recibido %d\n", sent_block, received_block);
-                // TODO: cerrar socket?
                 // TODO: cerrar fp?
                 break;
             }
@@ -229,7 +228,7 @@ int main(int argc, char* argv[]) {
             struct {
                 short opcode;
                 short block;
-                char data[MAX_PAYLOAD_SIZE];
+                char data[MAX_SIZE];
             } data_packet;
 
             ssize_t data_len = recvfrom(udp_socket, &data_packet, sizeof(data_packet), 0,
@@ -258,7 +257,7 @@ int main(int argc, char* argv[]) {
 
             printf("ACK %d enviado\n", block_num);
             expected_block++;
-            if (data_len - 4 < MAX_PAYLOAD_SIZE) break;
+            if (data_len - 4 < MAX_SIZE) break;
         }
 
         fclose(out);
