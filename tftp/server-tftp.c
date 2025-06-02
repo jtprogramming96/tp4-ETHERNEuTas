@@ -7,8 +7,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <fcntl.h>
-
-#define MAX_PAYLOAD_SIZE 512
+#include "../constants.h"
 
 struct tftp_packet {
     short opcode;       // Opcode en formato de red (big-endian)
@@ -65,7 +64,7 @@ int main(int argc, char* argv[]) {
                 
                 // Extraer nombre de archivo y modo
                 char *filename = packet.payload;
-                char *mode = filename + strlen(filename) + 1;
+                char *mode = filename + strlen(filename) + 1;   // str considera la longitud hasta el primer fin de cadena "\0"
                 
                 printf("Cliente quiere escribir archivo: %s (modo: %s)\n", filename, mode);
                 

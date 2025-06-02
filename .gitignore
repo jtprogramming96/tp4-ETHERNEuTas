@@ -69,3 +69,7 @@ tftp/bin/*
 chat/bin/*
 !chat/bin/.keep
 .vscode
+
+# executing folders
+uploads/
+downloads/

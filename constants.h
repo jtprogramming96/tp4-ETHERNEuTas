@@ -1,0 +1,3 @@
+#define OPCODE_ERROR 5
+#define OPCODE_DATA 3
+#define MAX_PAYLOAD_SIZE 512

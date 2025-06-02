@@ -7,14 +7,11 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-
-#define OPCODE_ERROR 5  // definir constantes
-#define OPCODE_DATA 3
-#define DATA_MAX_SIZE 512
+#include "../constants.h"
 
 struct tftp_format {
     short opcode;       // Opcode en formato de red (big-endian)
-    char payload[DATA_MAX_SIZE];  // Payload (nombre de archivo + modo)
+    char payload[MAX_PAYLOAD_SIZE];  // Payload (nombre de archivo + modo)
 };
 
 int main(int argc, char* argv[]) {
@@ -151,14 +148,14 @@ int main(int argc, char* argv[]) {
 
         printf("Bloque 0 confirmado. Iniciando envío de datos...\n");
         short sent_block = 1;
-        char buffer[DATA_MAX_SIZE];
+        char buffer[MAX_PAYLOAD_SIZE];
         size_t bytes_read;
 
         while ((bytes_read = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
             struct {
                 short opcode;
                 short block;
-                char data[DATA_MAX_SIZE];
+                char data[MAX_PAYLOAD_SIZE];
             } data_packet;
 
             data_packet.opcode = htons(OPCODE_DATA);
@@ -232,7 +229,7 @@ int main(int argc, char* argv[]) {
             struct {
                 short opcode;
                 short block;
-                char data[DATA_MAX_SIZE];
+                char data[MAX_PAYLOAD_SIZE];
             } data_packet;
 
             ssize_t data_len = recvfrom(udp_socket, &data_packet, sizeof(data_packet), 0,
@@ -261,7 +258,7 @@ int main(int argc, char* argv[]) {
 
             printf("ACK %d enviado\n", block_num);
             expected_block++;
-            if (data_len - 4 < DATA_MAX_SIZE) break;
+            if (data_len - 4 < MAX_PAYLOAD_SIZE) break;
         }
 
         fclose(out);
