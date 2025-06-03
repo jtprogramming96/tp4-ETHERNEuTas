@@ -1,6 +1,7 @@
 #define OPCODE_ERROR 5
 #define OPCODE_ACK 4
 #define OPCODE_DATA 3
+#define OPCODE_WRQ 2
 #define OPCODE_RRQ 1
 #define MAX_SIZE 512
 
