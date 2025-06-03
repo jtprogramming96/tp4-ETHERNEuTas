@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include "../constants.h"
+#include "../tftp_packets.h"
 
 struct tftp_format {
     short opcode;       // Opcode en formato de red (big-endian)

@@ -73,3 +73,6 @@ chat/bin/*
 # executing folders
 uploads/
 downloads/
+
+# others
+audio.mp3

@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include "../constants.h"
+#include "../tftp_packets.h"
 
 struct tftp_packet {
     short opcode;       // Opcode en formato de red (big-endian)
@@ -70,13 +71,16 @@ int main(int argc, char* argv[]) {
                 
                 // Construir ruta completa: uploads/filename
                 char full_path[1024];
+                char temp_path[1024];
+
                 snprintf(full_path, sizeof(full_path), "uploads/%s", filename);
+                snprintf(temp_path, sizeof(temp_path), "uploads/.partial_%s", filename);
 
                 // Crear carpeta si no existe (esto podrías moverlo antes del bucle principal si quieres hacerlo solo una vez)
                 mkdir("uploads", 0755);
 
-                // Verificar si el archivo ya existe en la carpeta uploads/
-                if (access(full_path, F_OK) == 0) {
+                // Verificar si el archivo ya existe en la carpeta uploads/ o si está en proceso de transferencia
+                if (access(full_path, F_OK) == 0 || access(temp_path, F_OK) == 0) {
                     printf("Error: Archivo ya existe en uploads/\n");
 
                     struct tftp_packet error_packet;
@@ -94,9 +98,9 @@ int main(int argc, char* argv[]) {
                 }
 
                 // Crear archivo
-                int file_fd = open(full_path, O_WRONLY | O_CREAT, 0644);
+                int file_fd = open(temp_path, O_WRONLY | O_CREAT | O_EXCL, 0644);
                 if (file_fd < 0) {
-                    perror("Error al crear archivo");
+                    perror("Error al crear el archivo temporal");
                     break;
                 }
 
@@ -167,6 +171,7 @@ int main(int argc, char* argv[]) {
                 printf("Transferencia finalizada. Archivo guardado en '%s'\n", full_path);
                 
                 close(file_fd);
+                rename(temp_path, full_path);
                 break;
             }
             case OPCODE_RRQ:
