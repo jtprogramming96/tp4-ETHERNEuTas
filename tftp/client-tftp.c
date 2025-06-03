@@ -215,11 +215,16 @@ int main(int argc, char* argv[]) {
         }
 
         struct tftp_format rrq_packet;
-        rrq_packet.opcode = htons(1); // RRQ
-        int payload_len = snprintf(rrq_packet.payload, sizeof(rrq_packet.payload),
-                                   "%s%c%s%c", filename, 0, mode, 0);
+        rrq_packet.opcode = htons(OPCODE_RRQ);
+        int payload_len = snprintf(rrq_packet.payload,   // payload= |fileName|0|mode|0|
+                                    sizeof(rrq_packet.payload),
+                                    "%s%c%s%c",
+                                    filename,
+                                    0,
+                                    mode,
+                                    0);
 
-        sendto(udp_socket, &rrq_packet, 2 + payload_len, 0,
+        sendto(udp_socket, &rrq_packet, sizeof(rrq_packet.opcode) + payload_len, 0,
                (struct sockaddr*)&server_addr, server_len);
 
         short expected_block = 1;
@@ -240,24 +245,24 @@ int main(int argc, char* argv[]) {
             }
 
             short opcode = ntohs(data_packet.opcode);
-            short block_num = ntohs(data_packet.block);
+            short received_block = ntohs(data_packet.block);
 
-            if (opcode != 3 || block_num != expected_block) {
-                printf("Paquete DATA inválido\n");
+            if (opcode != OPCODE_DATA || received_block != expected_block) {
+                printf("Bloque no esperado o no es DATA\n");
                 break;
             }
 
-            fwrite(data_packet.data, 1, data_len - 4, out);
+            fwrite(data_packet.data, 1, data_len - sizeof(data_packet.opcode) - sizeof(data_packet.block), out);
 
             struct tftp_format ack;
-            ack.opcode = htons(4);
-            short ack_block = htons(block_num);
-            memcpy(ack.payload, &ack_block, 2);
-            sendto(udp_socket, &ack, 4, 0, (struct sockaddr*)&server_addr, server_len);
+            ack.opcode = htons(OPCODE_ACK);
+            short ack_block = htons(received_block);
+            memcpy(ack.payload, &ack_block, sizeof(ack_block));
+            sendto(udp_socket, &ack, sizeof(ack.opcode) + sizeof(short), 0, (struct sockaddr*)&server_addr, server_len);
 
-            printf("ACK %d enviado\n", block_num);
+            printf("ACK %d enviado\n", received_block);
             expected_block++;
-            if (data_len - 4 < MAX_SIZE) break;
+            if (data_len - sizeof(data_packet.opcode) - sizeof(data_packet.block) < MAX_SIZE) break;
         }
 
         fclose(out);
