@@ -186,36 +186,41 @@ int main(int argc, char* argv[]) {
                 int file_fd = open(full_path, O_RDONLY);
                 if (file_fd < 0) {
                     perror("Archivo no encontrado o no se pudo abrir");
-                    struct tftp_packet error_packet;
-                    error_packet.opcode = htons(5);  // ERROR
-                    short error_code = htons(1);     // File not found
+                    struct tftp_packet error_packet;                            // payload = |errCode|errMsg|0|
+                    error_packet.opcode = htons(OPCODE_ERROR);
+                    short error_code = htons(TFTP_ERROR_FILE_NOT_FOUND);
                     char *error_msg = "File not found";
-                    memcpy(error_packet.payload, &error_code, 2);
-                    strcpy(error_packet.payload + 2, error_msg);
-                    error_packet.payload[2 + strlen(error_msg)] = 0;
+                    memcpy(error_packet.payload, &error_code, sizeof(error_code));
+                    strcpy(error_packet.payload + sizeof(error_code), error_msg);
+                    error_packet.payload[2 + strlen(error_msg)] = 0;    
 
-                    sendto(udp_socket, &error_packet, 4 + strlen(error_msg) + 1, 0,
-                        (struct sockaddr*)&client_addr, client_addr_len);
+                    sendto(udp_socket,
+                            &error_packet, sizeof(error_packet.opcode) + sizeof(error_code) + strlen(error_msg) + 1,
+                            0,
+                            (struct sockaddr*)&client_addr,
+                            client_addr_len);
                     break;
                 }
 
                 short block_number = 1;
                 ssize_t bytes_read;
-                char buffer[512];
+                char buffer[MAX_SIZE];
 
                 while ((bytes_read = read(file_fd, buffer, sizeof(buffer))) > 0) {
                     struct {
                         short opcode;
                         short block;
-                        char data[512];
+                        char data[MAX_SIZE];
                     } data_packet;
 
-                    data_packet.opcode = htons(3);  // DATA
+                    data_packet.opcode = htons(OPCODE_DATA);
                     data_packet.block = htons(block_number);
                     memcpy(data_packet.data, buffer, bytes_read);
 
-                    ssize_t sent_len = sendto(udp_socket, &data_packet, 4 + bytes_read, 0,
-                                            (struct sockaddr*)&client_addr, client_addr_len);
+                    ssize_t sent_len = sendto(udp_socket,
+                                                &data_packet, sizeof(data_packet.opcode) + sizeof(data_packet.block) + bytes_read,
+                                                0,
+                                                (struct sockaddr*)&client_addr, client_addr_len);
 
                     if (sent_len < 0) {
                         perror("Error al enviar paquete DATA");
@@ -224,23 +229,27 @@ int main(int argc, char* argv[]) {
 
                     // Esperar ACK
                     struct tftp_packet ack_packet;
-                    ssize_t ack_len = recvfrom(udp_socket, &ack_packet, sizeof(ack_packet), 0,
-                                            (struct sockaddr*)&client_addr, &client_addr_len);
+                    ssize_t ack_len = recvfrom(udp_socket,
+                                                &ack_packet, sizeof(ack_packet),
+                                                0,
+                                                (struct sockaddr*)&client_addr, &client_addr_len);
 
                     if (ack_len < 0) {
                         perror("Error al recibir ACK");
                         break;
                     }
 
-                    short ack_opcode = ntohs(ack_packet.opcode);
-                    short ack_block;
-                    memcpy(&ack_block, ack_packet.payload, 2);
-                    ack_block = ntohs(ack_block);
+                    short opcode = ntohs(ack_packet.opcode);
+                    short recongnized_block;
+                    memcpy(&recongnized_block, ack_packet.payload, sizeof(short));
+                    recongnized_block = ntohs(recongnized_block);
 
-                    if (ack_opcode != 4 || ack_block != block_number) {
-                        printf("ACK inválido recibido. Esperado: %d, recibido: %d\n", block_number, ack_block);
+                    if (opcode != OPCODE_ACK || recongnized_block != block_number) {
+                        printf("ACK inválido recibido. Esperado: %d, recibido: %d\n", block_number, recongnized_block);
                         break;
                     }
+
+                    // TODO: valida cuando el archivo queda corrupto
 
                     printf("ACK %d recibido\n", block_number);
                     block_number++;
