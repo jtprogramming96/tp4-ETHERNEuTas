@@ -354,31 +354,43 @@ int main(int argc, char *argv[])
 
             if (pid == 0) {
                 // Proceso hijo
-                close(udp_socket);
+                close(udp_socket); // Cerramos socket heredado del padre
 
-                // Crear un nuevo socket UDP solo para este hijo
+                // Creamos un nuevo socket exclusivo del hijo
                 int child_socket = socket(AF_INET, SOCK_DGRAM, 0);
                 if (child_socket < 0) {
                     perror("Error al crear socket en proceso hijo");
                     exit(1);
                 }
 
-                // Reusar misma dirección (importante en UDP)
+                // Asignar puerto dinámico (puerto 0)
+                struct sockaddr_in child_addr;
+                memset(&child_addr, 0, sizeof(child_addr));
+                child_addr.sin_family = AF_INET;
+                child_addr.sin_addr.s_addr = INADDR_ANY;
+                child_addr.sin_port = 0;  // el sistema elige un puerto libre
+
+                if (bind(child_socket, (struct sockaddr*)&child_addr, sizeof(child_addr)) < 0) {
+                    perror("Error en bind del socket hijo");
+                    close(child_socket);
+                    exit(1);
+                }
+
+                // Timeout para evitar bloqueos eternos
                 struct timeval timeout;
                 timeout.tv_sec = 3;
                 timeout.tv_usec = 0;
                 setsockopt(child_socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
+                // Lógica de transferencia según tipo
                 if (opcode == OPCODE_WRQ)
                     handle_wrq(child_socket, client_addr, client_addr_len, packet);
                 else
                     handle_rrq(child_socket, client_addr, client_addr_len, packet);
 
                 close(child_socket);
-                break;
+                exit(0);
             }
-        } else {
-            printf("Opcode no válido o no manejado en main: %d\n", opcode);
         }
 
         printf("Servidor listo, esperando próximas conexiones...\n");
