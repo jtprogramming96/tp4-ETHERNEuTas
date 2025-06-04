@@ -271,7 +271,7 @@ int main(int argc, char* argv[]) {
                     short received_block = ntohs(data_packet.block);
 
                     if (opcode == OPCODE_DATA && received_block == expected_block) {
-                        // Procesar el bloque
+                        // Procesar bloque válido
                         fwrite(data_packet.data, 1, data_len - 4, out);
 
                         struct tftp_format ack;
@@ -293,9 +293,25 @@ int main(int argc, char* argv[]) {
                         }
 
                         break;
+                    } else if (opcode == OPCODE_ERROR) {
+                        short error_code;
+                        memcpy(&error_code, data_packet.data, 2);
+                        error_code = ntohs(error_code);
+                        char *error_msg = data_packet.data + 2;
+                        printf("Error recibido del servidor: (code %d) %s\n", error_code, error_msg);
+                        error_ocurred = 1;
+                        break;
+                    } else if (opcode == OPCODE_DATA && received_block < expected_block) {
+                        // 🔁 Reenviar ACK anterior
+                        struct tftp_format ack;
+                        ack.opcode = htons(OPCODE_ACK);
+                        short ack_block = htons(received_block);
+                        memcpy(ack.payload, &ack_block, sizeof(ack_block));
+                        sendto(udp_socket, &ack, 4, 0, (struct sockaddr*)&server_addr, server_len);
+                        printf("ACK duplicado reenviado para bloque %d (ya procesado)\n", received_block);
                     } else {
-                        perror("Error al recibir DATA");
-                        retries++;
+                        printf("Paquete inesperado. Opcode: %d, Bloque: %d (esperado: %d)\n",
+                            opcode, received_block, expected_block);
                     }
                 }
 
