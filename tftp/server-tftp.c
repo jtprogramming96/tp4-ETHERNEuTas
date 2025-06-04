@@ -280,6 +280,7 @@ void handle_rrq(int udp_socket, struct sockaddr_in client_addr, socklen_t client
 
 int main(int argc, char *argv[])
 {
+    srand(time(NULL));
     struct sockaddr_in client_addr, server_addr;
     socklen_t client_addr_len = sizeof(client_addr);
 
@@ -368,10 +369,16 @@ int main(int argc, char *argv[])
                 memset(&child_addr, 0, sizeof(child_addr));
                 child_addr.sin_family = AF_INET;
                 child_addr.sin_addr.s_addr = INADDR_ANY;
-                child_addr.sin_port = 0;  // el sistema elige un puerto libre
+                int puerto_hijo;
+                int intentos = 0;
+                do {
+                    puerto_hijo = 25002 + rand() % 19;  // 25002–25020
+                    child_addr.sin_port = htons(puerto_hijo);
+                    intentos++;
+                } while (bind(child_socket, (struct sockaddr*)&child_addr, sizeof(child_addr)) < 0 && intentos < 10);
 
-                if (bind(child_socket, (struct sockaddr*)&child_addr, sizeof(child_addr)) < 0) {
-                    perror("Error en bind del socket hijo");
+                if (intentos == 10) {
+                    perror("No se pudo bindear a un puerto del rango 25002–25020");
                     close(child_socket);
                     exit(1);
                 }
