@@ -11,14 +11,30 @@
 #include <fcntl.h>
 #include "../constants.h"
 #include "../tftp_packets.h"
+#include <pthread.h>
 
 struct tftp_packet {
     short opcode;       // Opcode en formato de red (big-endian)
     char payload[MAX_SIZE];
 };
 
+int udp_socket;
+
+void* input_thread(void* arg) {
+    char c;
+    while (1) {
+        c = getchar();
+        if (c == 'x') {
+            printf("[!] Cerrando socket para simular fallo.\n");
+            close(udp_socket);  // o el socket del cliente si estás del otro lado
+            break;
+        }
+    }
+    return NULL;
+}
+
+
 int main(int argc, char* argv[]) {
-    int udp_socket;
     struct sockaddr_in client_addr, server_addr;
     socklen_t client_addr_len = sizeof(client_addr);
     
@@ -26,15 +42,18 @@ int main(int argc, char* argv[]) {
         printf("Uso: %s PUERTO\n", argv[0]);
         exit(EXIT_FAILURE);
     }
-
+    
     char *port = argv[1];
-
+    
     udp_socket = socket(AF_INET, SOCK_DGRAM, 0);
     if (udp_socket < 0) {
         perror("Error al crear socket");
         exit(EXIT_FAILURE);
     }
-
+    
+    pthread_t tid;
+    pthread_create(&tid, NULL, input_thread, NULL);
+    
     struct timeval timeout;
     timeout.tv_sec = 3;
     timeout.tv_usec = 0;
