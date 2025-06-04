@@ -17,6 +17,8 @@ struct tftp_format {
 };
 
 int main(int argc, char* argv[]) {
+    int error_ocurred = 0;
+
     if (argc != 3) {
         printf("Uso: %s IP PUERTO\n", argv[0]);
         exit(EXIT_FAILURE);
@@ -214,7 +216,10 @@ int main(int argc, char* argv[]) {
 
     } else if (action == 'd') {
         char path[300];
+        char temp_path[300];
+        
         snprintf(path, sizeof(path), "downloads/%s", filename);
+        snprintf(temp_path, sizeof(temp_path), "downloads/.partial_%s", filename);
 
         FILE *check = fopen(path, "rb");
         if (check) {
@@ -225,9 +230,9 @@ int main(int argc, char* argv[]) {
         }
 
         mkdir("downloads", 0755);
-        FILE *out = fopen(path, "wb");
+        FILE *out = fopen(temp_path, "wb");
         if (!out) {
-            perror("No se pudo crear archivo de destino");
+            perror("No se pudo crear archivo temporal");
             close(udp_socket);
             exit(EXIT_FAILURE);
         }
@@ -281,6 +286,7 @@ int main(int argc, char* argv[]) {
                         if (data_len - 4 < MAX_SIZE) {
                             printf("Último bloque recibido (menos de %d bytes)\n", MAX_SIZE);
                             fclose(out);
+                            rename(temp_path, path);
                             printf("Archivo '%s' descargado exitosamente a 'downloads/'\n", filename);
                             close(udp_socket);
                             return 0;
@@ -307,17 +313,24 @@ int main(int argc, char* argv[]) {
             }
 
             if (retries == 3) {
-                printf("Error: no se recibió el bloque %d\n", expected_block);
+                printf("Error: no se recibió el bloque %d. Abortando.\n", expected_block);
+                error_ocurred = 1;
                 break;
             }
         }
-
+        
         fclose(out);
-        printf("Archivo '%s' descargado exitosamente a 'downloads/'\n", filename);
+        if(error_ocurred) {
+            unlink(temp_path);
+        }
+        else {
+            rename(temp_path, path);
+            printf("Archivo '%s' descargado exitosamente a 'downloads/'\n", filename);
+        }
     } else {
         printf("Acción inválida. Use 'd' para descargar o 's' para subir.\n");
     }
 
     close(udp_socket);
-    return 0;
+    return error_ocurred? EXIT_FAILURE : EXIT_SUCCESS;
 }
