@@ -218,8 +218,8 @@ int main(int argc, char* argv[]) {
         char path[300];
         char temp_path[300];
         
-        snprintf(path, sizeof(path), "downloads/%s", filename);
-        snprintf(temp_path, sizeof(temp_path), "downloads/.partial_%s", filename);
+        snprintf(path, sizeof(path), "%s", filename);
+        snprintf(temp_path, sizeof(temp_path), ".partial_%s", filename);
 
         FILE *check = fopen(path, "rb");
         if (check) {
@@ -229,7 +229,6 @@ int main(int argc, char* argv[]) {
             exit(EXIT_FAILURE);
         }
 
-        mkdir("downloads", 0755);
         FILE *out = fopen(temp_path, "wb");
         if (!out) {
             perror("No se pudo crear archivo temporal");
@@ -287,7 +286,7 @@ int main(int argc, char* argv[]) {
                             printf("Último bloque recibido (menos de %d bytes)\n", MAX_SIZE);
                             fclose(out);
                             rename(temp_path, path);
-                            printf("Archivo '%s' descargado exitosamente a 'downloads/'\n", filename);
+                            printf("Archivo '%s' descargado exitosamente en el directorio'\n", filename);
                             close(udp_socket);
                             return 0;
                         }
@@ -295,14 +294,13 @@ int main(int argc, char* argv[]) {
                         break;
                     } else if (opcode == OPCODE_ERROR) {
                         short error_code;
-                        memcpy(&error_code, data_packet.data, 2);
+                        memcpy(&error_code, ((char*)&data_packet) + 2, 2);
                         error_code = ntohs(error_code);
-                        char *error_msg = data_packet.data + 2;
+                        char *error_msg = ((char*)&data_packet) + 4;
                         printf("Error recibido del servidor: (code %d) %s\n", error_code, error_msg);
                         error_ocurred = 1;
                         break;
                     } else if (opcode == OPCODE_DATA && received_block < expected_block) {
-                        // 🔁 Reenviar ACK anterior
                         struct tftp_format ack;
                         ack.opcode = htons(OPCODE_ACK);
                         short ack_block = htons(received_block);
@@ -328,6 +326,10 @@ int main(int argc, char* argv[]) {
                 printf("Esperando DATA bloque %d (reintento %d)\n", expected_block, retries);
             }
 
+            if (error_ocurred) {
+                break;  // salir también del bucle principal
+            }
+
             if (retries == 3) {
                 printf("Error: no se recibió el bloque %d. Abortando.\n", expected_block);
                 error_ocurred = 1;
@@ -341,7 +343,7 @@ int main(int argc, char* argv[]) {
         }
         else {
             rename(temp_path, path);
-            printf("Archivo '%s' descargado exitosamente a 'downloads/'\n", filename);
+            printf("Archivo '%s' descargado exitosamente en el directorio'\n", filename);
         }
     } else {
         printf("Acción inválida. Use 'd' para descargar o 's' para subir.\n");

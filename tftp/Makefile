@@ -1,23 +1,26 @@
-CC=gcc
-CFLAGS=-Wall -Werror -g -pthread 
-BIN=./bin
+# Compilador y flags
+CC = gcc
+CFLAGS = -Wall -Wextra -O2
 
-PROGS=server-tftp client-tftp
+# Rutas a los archivos fuente
+CLIENTE_SRC = cliente/client-tftp.c
+SERVIDOR_SRC = servidor/server-tftp.c
 
-.PHONY: all
-all: $(PROGS)
+# Ejecutables
+CLIENTE_BIN = cliente/cliente
+SERVIDOR_BIN = servidor/servidor
 
-LIST=$(addprefix $(BIN)/, $(PROGS))
+# Regla por defecto
+all: $(CLIENTE_BIN) $(SERVIDOR_BIN)
 
-server-tftp: server-tftp.c 
-	$(CC) -o bin/$@ $^ $(CFLAGS)
+# Cliente
+$(CLIENTE_BIN): $(CLIENTE_SRC)
+	$(CC) $(CFLAGS) -o $@ $<
 
-client-tftp: client-tftp.c 
-	$(CC) -o bin/$@ $^ $(CFLAGS)
+# Servidor
+$(SERVIDOR_BIN): $(SERVIDOR_SRC)
+	$(CC) $(CFLAGS) -o $@ $<
 
-.PHONY: clean
+# Limpieza
 clean:
-	rm -f $(LIST)
-
-zip:
-	git archive --format zip --output ${USER}-TP4.zip HEAD
+	rm -f $(CLIENTE_BIN) $(SERVIDOR_BIN)
