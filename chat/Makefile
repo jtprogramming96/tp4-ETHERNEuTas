@@ -9,8 +9,9 @@ all: $(PROGS)
 
 LIST=$(addprefix $(BIN)/, $(PROGS))
 
-server-chat: server-chat.c 
-	$(CC) -o bin/$@ $^ $(CFLAGS)
+# Compilación del ejecutable desde el archivo en el subdirectorio 'servidor/'
+server-chat: servidor/server-chat.c
+	$(CC) -o $(BIN)/$@ $^ $(CFLAGS)
 
 .PHONY: clean
 clean:
