@@ -6,7 +6,7 @@
 #include <arpa/inet.h>
 #include <sys/select.h>
 
-#define PUERTO 9999
+#define PUERTO 10000
 #define BUFFER_SIZE 1024
 #define MAX_CLIENTES 100
 
