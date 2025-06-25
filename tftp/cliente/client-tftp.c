@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) {
     char *ip = argv[1];
     char *port = argv[2];
     char filename[256];
-    char mode[] = "netascii";  // Modo de transferencia
+    char mode[] = "octet";  // Modo de transferencia
 
     char action;
     printf("\nDesea descargar (d) o subir (s) un archivo? ");
