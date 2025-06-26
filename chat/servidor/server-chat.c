@@ -62,7 +62,62 @@ void* manejar_cliente(void* arg) {
             continue;
         }
 
-        // Buscar destinatario
+        // MODO ARCHIVO: detectar FILE:
+        if (strncmp(mensaje, "FILE:", 5) == 0) {
+            char* nombre_archivo = strtok(mensaje + 5, ":");
+            char* str_tamano = strtok(NULL, ":");
+
+            if (!nombre_archivo || !str_tamano) {
+                send(sock, "Encabezado de archivo inválido.\n", 32, 0);
+                continue;
+            }
+
+            int tamano_archivo = atoi(str_tamano);
+            if (tamano_archivo <= 0) {
+                send(sock, "Tamaño de archivo inválido.\n", 29, 0);
+                continue;
+            }
+
+            // Buscar destinatario
+            int socket_destino = -1;
+            pthread_mutex_lock(&mutex);
+            for (int i = 0; i < num_clientes; ++i) {
+                if (strcmp(clientes[i].nombre, destino) == 0) {
+                    socket_destino = clientes[i].socket;
+                    break;
+                }
+            }
+            pthread_mutex_unlock(&mutex);
+
+            if (socket_destino == -1) {
+                send(sock, "Usuario no encontrado.\n", 24, 0);
+                continue;
+            }
+
+            // Notificar destinatario
+            char aviso[BUFFER_SIZE];
+            snprintf(aviso, sizeof(aviso), "[%s] 📁 Recibiendo archivo '%s' (%d bytes)\n", nombre, nombre_archivo, tamano_archivo);
+            send(socket_destino, aviso, strlen(aviso), 0);
+            send(sock, "📤 Enviando archivo...\n", 24, 0);
+
+            // Reenviar los datos binarios en bloques
+            int total_recibido = 0;
+            while (total_recibido < tamano_archivo) {
+                int restante = tamano_archivo - total_recibido;
+                int tam_bloque = (restante < BUFFER_SIZE) ? restante : BUFFER_SIZE;
+                int rec = recv(sock, buffer, tam_bloque, 0);
+                if (rec <= 0) break;
+
+                send(socket_destino, buffer, rec, 0);
+                total_recibido += rec;
+            }
+
+            send(sock, "✅ Archivo enviado con éxito.\n", 30, 0);
+            send(socket_destino, "\n✅ Archivo recibido.\n", 23, 0);
+            continue;
+        }
+
+        // MODO TEXTO
         int encontrado = 0;
         pthread_mutex_lock(&mutex);
         for (int i = 0; i < num_clientes; ++i) {
