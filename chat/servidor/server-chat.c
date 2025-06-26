@@ -113,7 +113,6 @@ void* manejar_cliente(void* arg) {
             }
 
             send(sock, "✅ Archivo enviado con éxito.\n", 30, 0);
-            send(socket_destino, "\n✅ Archivo recibido.\n", 23, 0);
             continue;
         }
 

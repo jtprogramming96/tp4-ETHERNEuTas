@@ -3,7 +3,7 @@ import socket
 import threading
 import os
 
-HOST = '127.0.0.1'
+HOST = '192.168.0.102'
 PORT = 10000
 
 def enviar_archivo(sock, destinatario, ruta_archivo):
@@ -84,7 +84,7 @@ def recibir_mensajes(sock):
 
                 if bytes_restantes <= 0:
                     archivo_actual.close()
-                    print(f"\n✅ Archivo '{archivo_actual.name}' recibido correctamente.\n>> ", end="", flush=True)
+                    print(f"\n📥 Archivo '{archivo_actual.name}' recibido correctamente.\n>> ", end="", flush=True)
                     modo_archivo = False
                     archivo_actual = None
 
