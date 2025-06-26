@@ -5,6 +5,10 @@ import os
 
 HOST = '192.168.0.102'
 PORT = 10000
+archivo_pendiente_confirmacion = None
+sock_global = None  # para enviar desde el hilo principal si es necesario
+bytes_restantes = 0
+archivo_actual = None
 
 def enviar_archivo(sock, destinatario, ruta_archivo):
     if not os.path.isfile(ruta_archivo):
@@ -17,19 +21,32 @@ def enviar_archivo(sock, destinatario, ruta_archivo):
     # Enviar encabezado
     encabezado = f"{destinatario}:FILE:{nombre_archivo}:{tamaño}"
     sock.sendall(encabezado.encode())
-    print(f"📤 Enviando '{nombre_archivo}' a {destinatario} ({tamaño} bytes)...")
+    print(f"📤 Esperando confirmación para enviar '{nombre_archivo}' ({tamaño} bytes)...")
 
-    # Enviar contenido del archivo
+    # Esperar respuesta: ACEPTADO o RECHAZADO
     try:
-        with open(ruta_archivo, "rb") as archivo:
-            while True:
-                bloque = archivo.read(1024)
-                if not bloque:
-                    break
-                sock.sendall(bloque)
-        print(f"✅ Archivo '{nombre_archivo}' enviado correctamente.")
+        respuesta = sock.recv(1024).decode().strip()
     except Exception as e:
-        print(f"❌ Error al enviar el archivo: {e}")
+        print(f"❌ Error al esperar confirmación del servidor: {e}")
+        return
+
+    if respuesta == "ACEPTADO":
+        print(f"✅ Envío aceptado. Enviando archivo '{nombre_archivo}'...")
+
+        try:
+            with open(ruta_archivo, "rb") as archivo:
+                while True:
+                    bloque = archivo.read(1024)
+                    if not bloque:
+                        break
+                    sock.sendall(bloque)
+            print(f"✅ Archivo '{nombre_archivo}' enviado correctamente.")
+        except Exception as e:
+            print(f"❌ Error al enviar el archivo: {e}")
+    elif respuesta == "RECHAZADO":
+        print(f"🚫 El destinatario rechazó el archivo '{nombre_archivo}'.")
+    else:
+        print(f"⚠️ Respuesta desconocida del servidor: {respuesta}")
 
 def recibir_mensajes(sock):
     buffer_texto = b""
@@ -51,26 +68,27 @@ def recibir_mensajes(sock):
                 while b"\n" in buffer_texto and not modo_archivo:
                     linea, buffer_texto = buffer_texto.split(b"\n", 1)
                     linea_str = linea.decode(errors="ignore").strip()
-                    print("\n📥", linea_str, "\n>> ", end="", flush=True)
 
                     # Detectar aviso de archivo, formato esperado:  
                     # [emisor] 📁 Recibiendo archivo 'nombre.ext' (N bytes)
-                    if "📁 Recibiendo archivo" in linea_str:
+                    if "CONFIRMAR_ARCHIVO:" in linea_str:
                         try:
-                            # Extraer nombre y tamaño
-                            # Ejemplo: [usuario] 📁 Recibiendo archivo 'nombre.ext' (12345 bytes)
-                            partes = linea_str.split("'")
-                            archivo_actual = partes[1]
-                            tam_part = linea_str.split("(")[1]
-                            bytes_restantes = int(tam_part.split(" ")[0])
-                            modo_archivo = True
-                            print(f"📥 Empezando recepción de archivo '{archivo_actual}' ({bytes_restantes} bytes)")
-                            # Abrir archivo para escritura binaria
-                            archivo_actual = open(archivo_actual, "wb")
-                        except Exception as e:
-                            print(f"❌ Error parseando aviso de archivo: {e}")
-                            modo_archivo = False
+                            # Extraer datos
+                            partes = linea_str.split("CONFIRMAR_ARCHIVO:")[1].split(":")
+                            nombre_archivo = partes[0]
+                            tamaño_archivo = int(partes[1])
 
+                            # Preguntar al usuario si desea aceptar
+                            print(f"\n📥 Solicitan enviarte el archivo '{nombre_archivo}' ({tamaño_archivo} bytes)")
+                            print("✋ Escribí 'aceptar' o 'rechazar' para responder.")
+                            global archivo_pendiente_confirmacion
+                            archivo_pendiente_confirmacion = (nombre_archivo, tamaño_archivo)
+
+                        except Exception as e:
+                            print(f"❌ Error al procesar confirmación de archivo: {e}")
+                        continue
+
+                    print("\n📥", linea_str, "\n>> ", end="", flush=True)
             else:
                 # Estamos en modo recepción archivo
                 datos = sock.recv(min(1024, bytes_restantes))
@@ -106,6 +124,24 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 
     while True:
         entrada = input(">> ").strip()
+
+        # Si hay un archivo pendiente de confirmación
+        if archivo_pendiente_confirmacion:
+            if entrada.lower() in ["aceptar", "s"]:
+                s.sendall("CONFIRMACION:ACEPTAR".encode())
+                nombre_archivo, tamaño_archivo = archivo_pendiente_confirmacion
+                print(f"📥 Aceptaste el archivo '{nombre_archivo}'")
+                archivo_actual = open(nombre_archivo, "wb")
+                modo_archivo = True
+                bytes_restantes = tamaño_archivo
+                archivo_pendiente_confirmacion = None
+                continue
+            elif entrada.lower() in ["rechazar", "n"]:
+                s.sendall("CONFIRMACION:RECHAZAR".encode())
+                nombre_archivo, _ = archivo_pendiente_confirmacion
+                print(f"❌ Rechazaste el archivo '{nombre_archivo}'")
+                archivo_pendiente_confirmacion = None
+                continue
 
         if entrada.lower() == "salir":
             break

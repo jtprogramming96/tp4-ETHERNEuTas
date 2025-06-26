@@ -57,6 +57,10 @@ void* manejar_cliente(void* arg) {
         char* destino = strtok(buffer, ":");
         char* mensaje = strtok(NULL, "");
 
+        if (strncmp(buffer, "CONFIRMACION:", 14) == 0) {
+            continue; // ignorar, ya fue procesado como parte del flujo de archivo
+        }
+
         if (!destino || !mensaje) {
             send(sock, "Formato inválido. Usa destino:mensaje\n", 39, 0);
             continue;
@@ -94,13 +98,31 @@ void* manejar_cliente(void* arg) {
                 continue;
             }
 
-            // Notificar destinatario
+            // 1. Enviar solicitud de confirmación al receptor
             char aviso[BUFFER_SIZE];
-            snprintf(aviso, sizeof(aviso), "[%s] 📁 Recibiendo archivo '%s' (%d bytes)\n", nombre, nombre_archivo, tamano_archivo);
+            snprintf(aviso, sizeof(aviso),
+                "CONFIRMAR_ARCHIVO:%s:%d\n", nombre_archivo, tamano_archivo);
             send(socket_destino, aviso, strlen(aviso), 0);
-            send(sock, "📤 Enviando archivo...\n", 24, 0);
 
-            // Reenviar los datos binarios en bloques
+            // 2. Esperar respuesta del receptor (bloqueante)
+            char respuesta[BUFFER_SIZE];
+            int r = recv(socket_destino, respuesta, sizeof(respuesta) - 1, 0);
+            if (r <= 0) {
+                send(sock, "❌ Error al recibir confirmación del receptor.\n", 46, 0);
+                continue;
+            }
+            respuesta[r] = '\0';
+
+            if (strncmp(respuesta, "ACEPTAR", 7) == 0) {
+                send(sock, "ACEPTADO", 8, 0);
+            } else {
+                send(sock, "RECHAZADO", 9, 0);
+                send(socket_destino, "🚫 Archivo rechazado.\n", 23, 0);
+                continue;
+            }
+
+            // 3. Confirmado: reenviar los datos binarios
+            send(sock, "📤 Enviando archivo...\n", 24, 0);
             int total_recibido = 0;
             while (total_recibido < tamano_archivo) {
                 int restante = tamano_archivo - total_recibido;
@@ -113,6 +135,7 @@ void* manejar_cliente(void* arg) {
             }
 
             send(sock, "✅ Archivo enviado con éxito.\n", 30, 0);
+            send(socket_destino, "\n📥 Archivo recibido correctamente.\n", 36, 0);
             continue;
         }
 
