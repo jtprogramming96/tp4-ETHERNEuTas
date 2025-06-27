@@ -3,7 +3,7 @@ import socket
 import threading
 import os
 
-HOST = '192.168.0.102'
+HOST = '127.0.0.1'
 PORT = 10000
 archivo_pendiente_confirmacion = None
 sock_global = None  # para enviar desde el hilo principal si es necesario
@@ -26,6 +26,7 @@ def enviar_archivo(sock, destinatario, ruta_archivo):
     # Esperar respuesta: ACEPTADO o RECHAZADO
     try:
         respuesta = sock.recv(1024).decode().strip()
+        print("Rta: "+ respuesta)
     except Exception as e:
         print(f"❌ Error al esperar confirmación del servidor: {e}")
         return
@@ -91,6 +92,7 @@ def recibir_mensajes(sock):
                     print("\n📥", linea_str, "\n>> ", end="", flush=True)
             else:
                 # Estamos en modo recepción archivo
+                print("[DEBUG] MODO ARCHIVO ACTIVADO")
                 datos = sock.recv(min(1024, bytes_restantes))
                 if not datos:
                     print("Conexión cerrada inesperadamente durante recepción de archivo.")
@@ -128,7 +130,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         # Si hay un archivo pendiente de confirmación
         if archivo_pendiente_confirmacion:
             if entrada.lower() in ["aceptar", "s"]:
-                s.sendall("CONFIRMACION:ACEPTAR".encode())
+                s.sendall("ACEPTAR".encode())
                 nombre_archivo, tamaño_archivo = archivo_pendiente_confirmacion
                 print(f"📥 Aceptaste el archivo '{nombre_archivo}'")
                 archivo_actual = open(nombre_archivo, "wb")
@@ -137,7 +139,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 archivo_pendiente_confirmacion = None
                 continue
             elif entrada.lower() in ["rechazar", "n"]:
-                s.sendall("CONFIRMACION:RECHAZAR".encode())
+                s.sendall("RECHAZAR".encode())
                 nombre_archivo, _ = archivo_pendiente_confirmacion
                 print(f"❌ Rechazaste el archivo '{nombre_archivo}'")
                 archivo_pendiente_confirmacion = None
